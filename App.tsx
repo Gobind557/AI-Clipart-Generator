@@ -1,4 +1,5 @@
 import { StatusBar } from "expo-status-bar";
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { Image } from "expo-image";
 import { useMemo, useState } from "react";
@@ -22,6 +23,7 @@ import {
 } from "./src/shared/api/jobsClient";
 
 const POLL_INTERVAL_MS = 1800;
+const MAX_IMAGE_EDGE = 512;
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>("idle");
@@ -32,6 +34,38 @@ export default function App() {
 
   const isBusy = appState === "uploading" || appState === "processing";
   const canGenerate = useMemo(() => !!sourceUri && !isBusy, [sourceUri, isBusy]);
+
+  const prepareImageForUpload = async (
+    uri: string,
+    width?: number,
+    height?: number
+  ): Promise<{ uri: string; base64: string }> => {
+    const sourceWidth = width ?? MAX_IMAGE_EDGE;
+    const sourceHeight = height ?? MAX_IMAGE_EDGE;
+    const scale = Math.min(MAX_IMAGE_EDGE / sourceWidth, MAX_IMAGE_EDGE / sourceHeight, 1);
+
+    const outputWidth = Math.max(1, Math.round(sourceWidth * scale));
+    const outputHeight = Math.max(1, Math.round(sourceHeight * scale));
+
+    const optimized = await manipulateAsync(
+      uri,
+      [{ resize: { width: outputWidth, height: outputHeight } }],
+      {
+        compress: 0.72,
+        format: SaveFormat.JPEG,
+        base64: true
+      }
+    );
+
+    if (!optimized.base64) {
+      throw new Error("Unable to create optimized image payload.");
+    }
+
+    return {
+      uri: optimized.uri,
+      base64: optimized.base64
+    };
+  };
 
   const pickImage = async (): Promise<void> => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -49,17 +83,19 @@ export default function App() {
     });
 
     if (result.canceled) return;
-    const asset = result.assets[0];
-    const imageBase64 = asset.base64;
-    if (!imageBase64) {
-      Alert.alert("Upload failed", "Could not process the selected image.");
-      return;
-    }
+    try {
+      const asset = result.assets[0];
+      setAppState("uploading");
+      const optimized = await prepareImageForUpload(asset.uri, asset.width, asset.height);
 
-    setSourceUri(asset.uri);
-    setSourceBase64(imageBase64);
-    setTiles(clipStyles.map((style) => ({ style, status: "queued" })));
-    setAppState("idle");
+      setSourceUri(optimized.uri);
+      setSourceBase64(optimized.base64);
+      setTiles(clipStyles.map((style) => ({ style, status: "queued" })));
+      setAppState("idle");
+    } catch (_error) {
+      setAppState("error");
+      Alert.alert("Upload failed", "Could not optimize the selected image.");
+    }
   };
 
   const pollJob = async (job: string): Promise<void> => {
