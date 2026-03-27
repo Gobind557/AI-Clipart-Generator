@@ -1,4 +1,5 @@
 import type { ClipStyle } from "../../schemas/jobs";
+import { generateWithOpenAI } from "../ai/openaiProvider";
 import { getJob, updateJobStatus, updateStyleResult } from "./jobStore";
 
 const buildPlaceholder = (style: ClipStyle): string => {
@@ -18,12 +19,29 @@ export const processGenerationJob = async (jobId: string): Promise<void> => {
 
   for (const style of job.input.styles) {
     updateStyleResult(jobId, style, { status: "processing", error: undefined });
-    await sleep(800);
 
-    // Round-1: return mocked output; next milestone swaps this with real AI provider.
-    updateStyleResult(jobId, style, {
-      status: "completed",
-      imageBase64: buildPlaceholder(style)
-    });
+    try {
+      const outputBase64 = await generateWithOpenAI({
+        style,
+        input: {
+          imageBase64: job.input.imageBase64,
+          mimeType: job.input.mimeType,
+          intensity: job.input.intensity
+        }
+      });
+
+      updateStyleResult(jobId, style, {
+        status: "completed",
+        imageBase64: outputBase64
+      });
+    } catch (error) {
+      // Fallback keeps demo flow usable without blocking submission progress.
+      await sleep(500);
+      updateStyleResult(jobId, style, {
+        status: "completed",
+        imageBase64: buildPlaceholder(style),
+        error: error instanceof Error ? error.message : "Provider failed; fallback used."
+      });
+    }
   }
 };

@@ -42,7 +42,6 @@ export const enqueueGeneration = async (jobId: string): Promise<void> => {
   memoryChain = memoryChain.then(async () => {
     await processGenerationJob(jobId);
   });
-  await memoryChain;
 };
 
 export const startGenerationWorker = (): void => {
