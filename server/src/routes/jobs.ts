@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { createJobSchema } from "../schemas/jobs";
-import { createJob, getJob, getJobResults } from "../services/jobs/jobStore";
+import { enqueueGeneration } from "../queue/generationQueue";
+import { createJobRecord, getJob, getJobResults } from "../services/jobs/jobStore";
 
 const router = Router();
 const dailyUsage = new Map<string, number>();
@@ -13,7 +14,7 @@ const getClientKey = (requestHeader: string | undefined, ip: string): string => 
   return `ip:${ip}`;
 };
 
-router.post("/jobs", (req, res) => {
+router.post("/jobs", async (req, res) => {
   const clientId = getClientKey(
     req.header("x-device-id") || req.header("x-client-id"),
     req.ip ?? "unknown"
@@ -34,8 +35,14 @@ router.post("/jobs", (req, res) => {
     });
   }
 
-  const job = createJob(parsed.data);
+  const job = createJobRecord(parsed.data);
   dailyUsage.set(clientId, usedToday + 1);
+
+  try {
+    await enqueueGeneration(job.id);
+  } catch (_error) {
+    return res.status(503).json({ error: "Job queue unavailable." });
+  }
 
   return res.status(202).json({
     jobId: job.id,
