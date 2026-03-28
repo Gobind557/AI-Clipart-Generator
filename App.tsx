@@ -21,6 +21,7 @@ import {
   type AppState,
   type StyleTile
 } from "./src/shared/api/jobsClient";
+import { base64ToPngFileUri, savePngToGallery, sharePngFile } from "./src/shared/media/exportImage";
 
 const POLL_INTERVAL_MS = 1800;
 const POLL_TIMEOUT_MS = 65000;
@@ -33,6 +34,7 @@ export default function App() {
   const [jobId, setJobId] = useState<string>("");
   const [tiles, setTiles] = useState<StyleTile[]>(clipStyles.map((style) => ({ style, status: "queued" })));
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [exportBusyKey, setExportBusyKey] = useState<string>("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isBusy = appState === "uploading" || appState === "processing";
@@ -184,6 +186,45 @@ export default function App() {
     await generateAll();
   };
 
+  const exportPngForTile = async (tile: StyleTile): Promise<string> => {
+    if (!tile.imageBase64) {
+      throw new Error("No image data for this style.");
+    }
+    return base64ToPngFileUri(tile.imageBase64, tile.style);
+  };
+
+  const handleSaveTile = async (tile: StyleTile): Promise<void> => {
+    const key = `save-${tile.style}`;
+    try {
+      setExportBusyKey(key);
+      const uri = await exportPngForTile(tile);
+      await savePngToGallery(uri);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not save image.";
+      Alert.alert("Save failed", message);
+    } finally {
+      setExportBusyKey("");
+    }
+  };
+
+  const handleShareTile = async (tile: StyleTile): Promise<void> => {
+    const key = `share-${tile.style}`;
+    try {
+      setExportBusyKey(key);
+      const uri = await exportPngForTile(tile);
+      await sharePngFile(uri, `Share ${tile.style} clipart`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not share image.";
+      Alert.alert("Share failed", message);
+    } finally {
+      setExportBusyKey("");
+    }
+  };
+
+  const completedDataUri = (base64: string): string => {
+    return `data:image/png;base64,${base64}`;
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
@@ -215,7 +256,7 @@ export default function App() {
             <View key={tile.style} style={styles.tile}>
               <Text style={styles.tileTitle}>{tile.style}</Text>
               {tile.status === "completed" && tile.imageBase64 ? (
-                <Image source={`data:image/jpeg;base64,${tile.imageBase64}`} style={styles.result} contentFit="cover" />
+                <Image source={completedDataUri(tile.imageBase64)} style={styles.result} contentFit="cover" />
               ) : (
                 <View style={styles.placeholder}>
                   <ActivityIndicator color="#8b5cf6" />
@@ -223,6 +264,30 @@ export default function App() {
                 </View>
               )}
               <Text style={styles.tileStatus}>{tile.status}</Text>
+              {tile.status === "completed" && tile.imageBase64 ? (
+                <View style={styles.tileActions}>
+                  <Pressable
+                    style={[
+                      styles.tileActionBtn,
+                      exportBusyKey === `save-${tile.style}` && styles.tileActionDisabled
+                    ]}
+                    disabled={!!exportBusyKey}
+                    onPress={() => void handleSaveTile(tile)}
+                  >
+                    <Text style={styles.tileActionText}>Save PNG</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.tileActionBtn,
+                      exportBusyKey === `share-${tile.style}` && styles.tileActionDisabled
+                    ]}
+                    disabled={!!exportBusyKey}
+                    onPress={() => void handleShareTile(tile)}
+                  >
+                    <Text style={styles.tileActionText}>Share</Text>
+                  </Pressable>
+                </View>
+              ) : null}
             </View>
           ))}
         </View>
@@ -345,5 +410,25 @@ const styles = StyleSheet.create({
     marginTop: 8,
     color: "#a5b4fc",
     fontSize: 12
+  },
+  tileActions: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 8
+  },
+  tileActionBtn: {
+    flex: 1,
+    backgroundColor: "#334155",
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: "center"
+  },
+  tileActionDisabled: {
+    opacity: 0.5
+  },
+  tileActionText: {
+    color: "#e2e8f0",
+    fontSize: 12,
+    fontWeight: "600"
   }
 });
