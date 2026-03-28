@@ -2,7 +2,7 @@ import { StatusBar } from "expo-status-bar";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { Image } from "expo-image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -23,6 +23,7 @@ import {
 } from "./src/shared/api/jobsClient";
 
 const POLL_INTERVAL_MS = 1800;
+const POLL_TIMEOUT_MS = 65000;
 const MAX_IMAGE_EDGE = 512;
 
 export default function App() {
@@ -31,9 +32,25 @@ export default function App() {
   const [sourceBase64, setSourceBase64] = useState<string>("");
   const [jobId, setJobId] = useState<string>("");
   const [tiles, setTiles] = useState<StyleTile[]>(clipStyles.map((style) => ({ style, status: "queued" })));
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isBusy = appState === "uploading" || appState === "processing";
   const canGenerate = useMemo(() => !!sourceUri && !isBusy, [sourceUri, isBusy]);
+  const canRetry = useMemo(() => appState === "error" || appState === "partial", [appState]);
+
+  const clearPoll = (): void => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      clearPoll();
+    };
+  }, []);
 
   const prepareImageForUpload = async (
     uri: string,
@@ -90,32 +107,48 @@ export default function App() {
 
       setSourceUri(optimized.uri);
       setSourceBase64(optimized.base64);
+      setErrorMessage("");
+      setJobId("");
       setTiles(clipStyles.map((style) => ({ style, status: "queued" })));
       setAppState("idle");
     } catch (_error) {
       setAppState("error");
+      setErrorMessage("Could not optimize the selected image.");
       Alert.alert("Upload failed", "Could not optimize the selected image.");
     }
   };
 
-  const pollJob = async (job: string): Promise<void> => {
-    const interval = setInterval(async () => {
+  const pollJob = (job: string): void => {
+    clearPoll();
+    const startedAt = Date.now();
+
+    pollRef.current = setInterval(async () => {
       try {
+        if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+          clearPoll();
+          setAppState("error");
+          setErrorMessage("Generation timed out. Please retry.");
+          return;
+        }
+
         const statusResponse = await getJobStatus(job);
         const perStyle = statusResponse.perStyle ?? [];
-        const hasAnyDone = perStyle.some((item) => item.status === "completed");
+        const hasAnyDone = perStyle.some((item) => item.status === "completed" || item.status === "error");
         setTiles(perStyle);
+        setErrorMessage("");
         setAppState(hasAnyDone && statusResponse.status !== "completed" ? "partial" : statusResponse.status);
 
         if (statusResponse.status === "completed" || statusResponse.status === "error") {
-          clearInterval(interval);
+          clearPoll();
           const results = await getJobResults(job);
           setTiles(results.items);
-          setAppState(statusResponse.status);
+          const hasAnyFailed = results.items.some((item) => item.status === "error");
+          setAppState(hasAnyFailed ? "partial" : statusResponse.status);
         }
       } catch (_error) {
-        clearInterval(interval);
+        clearPoll();
         setAppState("error");
+        setErrorMessage("Unable to fetch job status. Check connection and retry.");
       }
     }, POLL_INTERVAL_MS);
   };
@@ -124,6 +157,8 @@ export default function App() {
     if (!sourceUri || !sourceBase64) return;
 
     try {
+      clearPoll();
+      setErrorMessage("");
       setAppState("uploading");
       setTiles(clipStyles.map((style) => ({ style, status: "processing" })));
 
@@ -137,11 +172,16 @@ export default function App() {
 
       setJobId(job.jobId);
       setAppState("processing");
-      await pollJob(job.jobId);
+      pollJob(job.jobId);
     } catch (_error) {
       setAppState("error");
+      setErrorMessage("Could not create generation job.");
       Alert.alert("Generation failed", "Please retry.");
     }
+  };
+
+  const retryGeneration = async (): Promise<void> => {
+    await generateAll();
   };
 
   return (
@@ -160,9 +200,15 @@ export default function App() {
         <Pressable style={[styles.secondaryButton, !canGenerate && styles.disabled]} onPress={generateAll} disabled={!canGenerate}>
           <Text style={styles.secondaryButtonText}>Generate All Styles</Text>
         </Pressable>
+        {canRetry ? (
+          <Pressable style={styles.retryButton} onPress={retryGeneration} disabled={isBusy}>
+            <Text style={styles.retryButtonText}>Retry Generation</Text>
+          </Pressable>
+        ) : null}
 
         <Text style={styles.stateText}>State: {appState}</Text>
         {jobId ? <Text style={styles.metaText}>Job: {jobId}</Text> : null}
+        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
         <View style={styles.grid}>
           {tiles.map((tile) => (
@@ -173,6 +219,7 @@ export default function App() {
               ) : (
                 <View style={styles.placeholder}>
                   <ActivityIndicator color="#8b5cf6" />
+                  <Text style={styles.placeholderText}>Generating...</Text>
                 </View>
               )}
               <Text style={styles.tileStatus}>{tile.status}</Text>
@@ -224,6 +271,18 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontWeight: "600"
   },
+  retryButton: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#475569",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center"
+  },
+  retryButtonText: {
+    color: "#dbeafe",
+    fontWeight: "600"
+  },
   disabled: {
     opacity: 0.45
   },
@@ -242,6 +301,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
     color: "#94a3b8",
     fontSize: 12
+  },
+  errorText: {
+    marginTop: 6,
+    color: "#fda4af",
+    fontSize: 13
   },
   grid: {
     marginTop: 18,
@@ -266,7 +330,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#2d3444",
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
+    gap: 8
+  },
+  placeholderText: {
+    color: "#94a3b8",
+    fontSize: 12
   },
   result: {
     height: 120,
