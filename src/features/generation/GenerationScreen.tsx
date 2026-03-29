@@ -49,7 +49,7 @@ export default function GenerationScreen(): ReactElement {
   const [sourceBase64, setSourceBase64] = useState<string>("");
   const [jobId, setJobId] = useState<string>("");
   const [selectedStyles, setSelectedStyles] = useState<ClipStyle[]>([...clipStyles]);
-  const [intensity, setIntensity] = useState(0.72);
+  const [intensity, setIntensity] = useState(0.52);
   const [promptSuffix, setPromptSuffix] = useState("");
   const [tiles, setTiles] = useState<StyleTile[]>(emptyTilesForStyles(clipStyles));
   const [compareStyle, setCompareStyle] = useState<ClipStyle | null>(null);
@@ -262,7 +262,12 @@ export default function GenerationScreen(): ReactElement {
         const perStyle = statusResponse.perStyle ?? [];
         const merged = activeStyles.map((style) => {
           const found = perStyle.find((p) => p.style === style);
-          return found ?? { style, status: "queued" as const };
+          const base = found ?? { style, status: "queued" as const };
+          /** Status poll has no imageBase64 — "completed" here only means backend finished; keep skeleton until /results. */
+          if (base.status === "completed" && !base.imageBase64) {
+            return { ...base, status: "processing" as const };
+          }
+          return base;
         });
 
         setTiles(merged);

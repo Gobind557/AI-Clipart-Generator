@@ -30,8 +30,8 @@ const antiSlop =
 
 /** Stops custom text from becoming a full face/body redesign. */
 const identityLock =
-  "IDENTITY LOCK: Same person as the input photo—keep apparent ethnicity, skin tone, age, jaw width, " +
-  "eye spacing, nose and mouth shape. Stylize rendering only; never replace them with a different-looking character.";
+  "IDENTITY LOCK: Same person as the input photo—keep head shape, face width, ethnicity, skin tone, age, jaw, " +
+  "eye spacing, nose and mouth. Only change surface style (lines, flat color, shading); do not swap in a new character.";
 
 export const buildStylePrompt = (
   style: ClipStyle,

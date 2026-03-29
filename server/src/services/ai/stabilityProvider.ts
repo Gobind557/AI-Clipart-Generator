@@ -11,12 +11,11 @@ type GenerateParams = {
 
 /** Slightly higher CFG helps pixel / flat styles stick to the prompt instead of drifting “pretty portrait”. */
 const cfgScaleByStyle: Record<ClipStyle, number> = {
-  cartoon: 7.5,
-  flat: 8,
-  anime: 7.5,
-  /** Slightly below max: very high CFG + text can invent a new face instead of stylizing the reference. */
-  pixel: 8.25,
-  sketch: 7
+  cartoon: 7.25,
+  flat: 7.75,
+  anime: 6.75,
+  pixel: 7.75,
+  sketch: 6.75
 };
 
 /**
@@ -46,15 +45,17 @@ export const generateWithStability = async ({ style, input }: GenerateParams): P
     .png()
     .toBuffer();
 
-  /** Higher API image_strength = closer to init; user “style strength” up ⇒ lower strength = bolder restyle. */
+  /**
+   * Stability: higher image_strength ≈ closer to init. Capped floor so max “style strength”
+   * does not wipe identity (slider at 1 was melting faces).
+   */
   let imageStrength =
     typeof input.intensity === "number"
-      ? Math.max(0.12, Math.min(0.92, 0.92 - input.intensity * 0.58))
-      : 0.5;
-  /** Custom prompts (e.g. “round glasses”) need extra adherence to the photo or the model redraws the whole face. */
+      ? Math.max(0.4, Math.min(0.9, 0.9 - input.intensity * 0.42))
+      : 0.62;
   if (input.promptSuffix?.trim()) {
-    imageStrength = Math.min(0.94, imageStrength + 0.12);
-    imageStrength = Math.max(imageStrength, 0.24);
+    imageStrength = Math.min(0.92, imageStrength + 0.08);
+    imageStrength = Math.max(imageStrength, 0.38);
   }
 
   const formData = new FormData();
@@ -71,7 +72,7 @@ export const generateWithStability = async ({ style, input }: GenerateParams): P
   formData.append("text_prompts[1][weight]", "-1");
   formData.append("cfg_scale", String(cfgScaleByStyle[style]));
   formData.append("samples", "1");
-  formData.append("steps", "45");
+  formData.append("steps", "36");
 
   const response = await fetch(url, {
     method: "POST",
