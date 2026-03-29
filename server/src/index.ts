@@ -1,5 +1,6 @@
 import "dotenv/config";
 import cors from "cors";
+import http from "http";
 import express from "express";
 import helmet from "helmet";
 import jobsRouter from "./routes/jobs";
@@ -23,8 +24,18 @@ app.get("/v1/health", (_req, res) => {
 app.use("/v1", jobsRouter);
 
 const port = Number(process.env.PORT ?? 8787);
-/** Railway/Docker send traffic to the container interface; localhost-only listen causes 502 + upstream "connection refused". */
+/** Must bind all interfaces or Railway’s proxy gets TCP reset / connection refused (502). */
 const host = process.env.HOST?.trim() || "0.0.0.0";
-app.listen(port, host, () => {
+
+const server = http.createServer(app);
+server.on("error", (err) => {
+  console.error("HTTP server failed to start:", err);
+  process.exit(1);
+});
+server.listen(port, host, () => {
   console.log(`API listening on http://${host}:${port}`);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandledRejection:", reason);
 });

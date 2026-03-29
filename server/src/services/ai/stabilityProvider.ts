@@ -1,5 +1,3 @@
-import sharp from "sharp";
-
 import type { ClipStyle, CreateJobInput } from "../../schemas/jobs";
 import { buildStyleNegativePrompt, buildStylePrompt } from "./stylePrompts";
 
@@ -27,6 +25,8 @@ const cfgScaleByStyle: Record<ClipStyle, number> = {
  * @see https://platform.stability.ai/docs/api-reference#tag/SDXL-and-SD1.6
  */
 export const generateWithStability = async ({ style, input }: GenerateParams): Promise<string> => {
+  const sharp = (await import("sharp")).default;
+
   const apiKey = process.env.STABILITY_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("STABILITY_API_KEY is not configured.");
