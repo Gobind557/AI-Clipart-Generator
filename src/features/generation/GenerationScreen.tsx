@@ -245,8 +245,7 @@ export default function GenerationScreen(): ReactElement {
     });
   };
 
-  const pollJob = (activeJobId: string, activeStyles: ClipStyle[]): void => {
-    if (!activeJobId) return;
+  const pollJob = (job: string, activeStyles: ClipStyle[]): void => {
     clearPoll();
     const startedAt = Date.now();
 
@@ -259,7 +258,7 @@ export default function GenerationScreen(): ReactElement {
           return;
         }
 
-        const statusResponse = await getJobStatus(activeJobId);
+        const statusResponse = await getJobStatus(job);
         const perStyle = statusResponse.perStyle ?? [];
         const merged = activeStyles.map((style) => {
           const found = perStyle.find((p) => p.style === style);
@@ -273,7 +272,7 @@ export default function GenerationScreen(): ReactElement {
 
         if (statusResponse.status === "completed" || statusResponse.status === "error") {
           clearPoll();
-          const results = await getJobResults(activeJobId);
+          const results = await getJobResults(job);
           const items = results.items ?? [];
           const mergedFinal = activeStyles.map((style) => {
             const found = items.find((p) => p.style === style);

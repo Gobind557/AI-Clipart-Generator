@@ -46,7 +46,6 @@ router.post("/jobs", async (req, res) => {
 
   return res.status(202).json({
     jobId: job.id,
-    id: job.id,
     status: job.status
   });
 });

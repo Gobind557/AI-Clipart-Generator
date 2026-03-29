@@ -1,0 +1,11 @@
+# Deploy the Express API (server/), not Expo. In the Render dashboard, link this repo and
+# either use this Blueprint or set: Root Directory = server, Start = npm start, Build = npm install && npm run build
+
+services:
+  - type: web
+    name: ai-clipart-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /v1/health

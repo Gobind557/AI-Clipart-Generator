@@ -28,27 +28,6 @@ const resolveApiBase = (): string => {
 
 const API_URL = resolveApiBase();
 
-/** RN `fetch` uses native networking — Chrome DevTools “Network” often stays empty; use Metro logs. */
-const logApi = (method: string, path: string, status: number): void => {
-  if (__DEV__) {
-    console.log(`[api] ${method} ${path} → ${status}`);
-  }
-};
-
-if (__DEV__) {
-  console.log("[api] base:", API_URL);
-}
-
-const readJobIdFromCreatePayload = (data: unknown): string | null => {
-  if (!data || typeof data !== "object") return null;
-  const o = data as Record<string, unknown>;
-  for (const key of ["jobId", "id", "job_id"] as const) {
-    const v = o[key];
-    if (typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v)) return v;
-  }
-  return null;
-};
-
 export const styles: ClipStyle[] = ["cartoon", "flat", "anime", "pixel", "sketch"];
 
 export type CreateJobOptions = {
@@ -87,34 +66,16 @@ export const createJob = async (
         : {})
     })
   });
-  logApi("POST", "/jobs", response.status);
-
-  const text = await response.text();
-  let data: unknown;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    throw new Error(`Create job: bad JSON (${response.status}).`);
-  }
 
   if (!response.ok) {
-    const msg =
-      data && typeof data === "object" && "error" in data && typeof (data as { error: unknown }).error === "string"
-        ? (data as { error: string }).error
-        : `HTTP ${response.status}`;
-    throw new Error(`Failed to create job: ${msg}`);
+    throw new Error("Failed to create generation job.");
   }
 
-  const jobId = readJobIdFromCreatePayload(data);
-  if (!jobId) {
-    throw new Error("Create job: response missing a UUID job id (expected jobId or id).");
-  }
-  return { jobId };
+  return response.json() as Promise<{ jobId: string }>;
 };
 
 export const getJobStatus = async (jobId: string): Promise<{ status: AppState; perStyle: StyleTile[] }> => {
   const response = await fetch(`${API_URL}/jobs/${jobId}`);
-  logApi("GET", `/jobs/${jobId}`, response.status);
   if (!response.ok) {
     throw new Error("Failed to fetch job status.");
   }
@@ -123,7 +84,6 @@ export const getJobStatus = async (jobId: string): Promise<{ status: AppState; p
 
 export const getJobResults = async (jobId: string): Promise<{ items: StyleTile[] }> => {
   const response = await fetch(`${API_URL}/jobs/${jobId}/results`);
-  logApi("GET", `/jobs/${jobId}/results`, response.status);
   if (!response.ok) {
     throw new Error("Failed to fetch job results.");
   }
