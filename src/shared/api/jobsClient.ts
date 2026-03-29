@@ -1,3 +1,5 @@
+import Constants from "expo-constants";
+
 export type ClipStyle = "cartoon" | "flat" | "anime" | "pixel" | "sketch";
 export type StyleStatus = "queued" | "processing" | "completed" | "error";
 export type AppState =
@@ -16,7 +18,25 @@ export type StyleTile = {
   error?: string;
 };
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://10.0.2.2:8787/v1";
+const resolveApiBase = (): string => {
+  const extra = Constants.expoConfig?.extra?.apiUrl;
+  const fromExtra = typeof extra === "string" ? extra.trim() : "";
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim() ?? "";
+  const raw = fromExtra || fromEnv || "http://10.0.2.2:8787/v1";
+  return raw.replace(/\/+$/, "");
+};
+
+const API_URL = resolveApiBase();
+
+const readJobIdFromCreatePayload = (data: unknown): string | null => {
+  if (!data || typeof data !== "object") return null;
+  const o = data as Record<string, unknown>;
+  for (const key of ["jobId", "id", "job_id"] as const) {
+    const v = o[key];
+    if (typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v)) return v;
+  }
+  return null;
+};
 
 export const styles: ClipStyle[] = ["cartoon", "flat", "anime", "pixel", "sketch"];
 
@@ -57,11 +77,27 @@ export const createJob = async (
     })
   });
 
-  if (!response.ok) {
-    throw new Error("Failed to create generation job.");
+  const text = await response.text();
+  let data: unknown;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    throw new Error(`Create job: bad JSON (${response.status}).`);
   }
 
-  return response.json();
+  if (!response.ok) {
+    const msg =
+      data && typeof data === "object" && "error" in data && typeof (data as { error: unknown }).error === "string"
+        ? (data as { error: string }).error
+        : `HTTP ${response.status}`;
+    throw new Error(`Failed to create job: ${msg}`);
+  }
+
+  const jobId = readJobIdFromCreatePayload(data);
+  if (!jobId) {
+    throw new Error("Create job: response missing a UUID job id (expected jobId or id).");
+  }
+  return { jobId };
 };
 
 export const getJobStatus = async (jobId: string): Promise<{ status: AppState; perStyle: StyleTile[] }> => {
