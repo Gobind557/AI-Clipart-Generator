@@ -36,7 +36,7 @@ import { readAsStringAsync, EncodingType } from "expo-file-system/legacy";
 import { hasCachedResults, loadResultCache, saveResultCache } from "../../shared/cache/resultCache";
 import { base64ToPngFileUri, savePngToGallery, sharePngFile } from "../../shared/media/exportImage";
 
-const POLL_INTERVAL_MS = 1800;
+const POLL_INTERVAL_MS = 1000;
 const POLL_TIMEOUT_MS = 90000;
 const MAX_IMAGE_EDGE = 512;
 
