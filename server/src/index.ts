@@ -23,6 +23,8 @@ app.get("/v1/health", (_req, res) => {
 app.use("/v1", jobsRouter);
 
 const port = Number(process.env.PORT ?? 8787);
-app.listen(port, () => {
-  console.log(`API listening on :${port}`);
+/** Railway/Docker send traffic to the container interface; localhost-only listen causes 502 + upstream "connection refused". */
+const host = process.env.HOST?.trim() || "0.0.0.0";
+app.listen(port, host, () => {
+  console.log(`API listening on http://${host}:${port}`);
 });
