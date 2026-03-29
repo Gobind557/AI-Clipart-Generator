@@ -9,16 +9,17 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { SkeletonTile } from "../../components/SkeletonTile";
 import {
   createJob,
+  getApiBaseUrl,
   getJobResults,
   getJobStatus,
   styles as clipStyles,
@@ -40,8 +41,8 @@ const POLL_INTERVAL_MS = 1000;
 const POLL_TIMEOUT_MS = 90000;
 const MAX_IMAGE_EDGE = 512;
 
-const emptyTilesForStyles = (styles: ClipStyle[]): StyleTile[] =>
-  styles.map((style) => ({ style, status: "queued" as const }));
+const emptyTilesForStyles = (styleList: ClipStyle[]): StyleTile[] =>
+  styleList.map((style) => ({ style, status: "queued" as const }));
 
 export default function GenerationScreen(): ReactElement {
   const [appState, setAppState] = useState<AppState>("idle");
@@ -51,7 +52,7 @@ export default function GenerationScreen(): ReactElement {
   const [selectedStyles, setSelectedStyles] = useState<ClipStyle[]>([...clipStyles]);
   const [intensity, setIntensity] = useState(0.52);
   const [promptSuffix, setPromptSuffix] = useState("");
-  const [tiles, setTiles] = useState<StyleTile[]>(emptyTilesForStyles(clipStyles));
+  const [tiles, setTiles] = useState<StyleTile[]>(() => emptyTilesForStyles([...clipStyles]));
   const [compareStyle, setCompareStyle] = useState<ClipStyle | null>(null);
   const [compareReveal, setCompareReveal] = useState(0.5);
   const [compareWidth, setCompareWidth] = useState(0);
@@ -74,6 +75,12 @@ export default function GenerationScreen(): ReactElement {
 
   const sharedFailureMessage = useMemo(() => getSharedFailureMessage(tiles), [tiles]);
 
+  const apiBaseDisplay = useMemo(() => getApiBaseUrl(), []);
+  const apiHostLooksDevOnly = useMemo(() => {
+    const u = apiBaseDisplay.toLowerCase();
+    return u.includes("10.0.2.2") || u.includes("localhost") || u.startsWith("http://127.");
+  }, [apiBaseDisplay]);
+
   const clearPoll = (): void => {
     if (pollRef.current) {
       clearInterval(pollRef.current);
@@ -85,6 +92,17 @@ export default function GenerationScreen(): ReactElement {
     return () => clearPoll();
   }, []);
 
+  /** Keep result tiles in sync with selected styles when not running a job. */
+  useEffect(() => {
+    if (isBusy) return;
+    setTiles((prevTiles) =>
+      selectedStyles.map((s) => {
+        const existing = prevTiles.find((t) => t.style === s);
+        return existing ?? { style: s, status: "queued" as const };
+      })
+    );
+  }, [selectedStyles, isBusy]);
+
   useEffect(() => {
     void hasCachedResults().then(setRestoreAvailable);
   }, []);
@@ -93,6 +111,12 @@ export default function GenerationScreen(): ReactElement {
     if (compareStyle !== null) return;
     const first = completedWithImage[0]?.style;
     if (first) setCompareStyle(first);
+  }, [compareStyle, completedWithImage]);
+
+  useEffect(() => {
+    if (compareStyle === null) return;
+    if (completedWithImage.some((t) => t.style === compareStyle)) return;
+    setCompareStyle(completedWithImage[0]?.style ?? null);
   }, [compareStyle, completedWithImage]);
 
   useEffect(() => {
@@ -320,10 +344,11 @@ export default function GenerationScreen(): ReactElement {
       setJobId(job.jobId);
       setAppState("processing");
       pollJob(job.jobId, selectedStyles);
-    } catch (_error) {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not create generation job.";
       setAppState("error");
-      setErrorMessage("Could not create generation job.");
-      Alert.alert("Generation failed", "Please retry.");
+      setErrorMessage(message);
+      Alert.alert("Generation failed", message);
     }
   };
 
@@ -397,11 +422,17 @@ export default function GenerationScreen(): ReactElement {
   const compareTile = tiles.find((t) => t.style === compareStyle && t.imageBase64);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <StatusBar style="light" />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>AI Clipart Generator</Text>
         <Text style={styles.subtitle}>Upload once, pick styles, generate in parallel.</Text>
+        {apiHostLooksDevOnly ? (
+          <Text style={styles.apiHostWarning}>
+            API is set to {apiBaseDisplay} (emulator/dev only). Set EXPO_PUBLIC_API_URL for your Preview
+            environment on expo.dev, then create a new APK.
+          </Text>
+        ) : null}
         {restoreAvailable ? (
           <Pressable onPress={() => void handleRestoreCache()} style={styles.restoreLinkWrap} hitSlop={10}>
             <Text style={styles.restoreLink}>Open last saved results on this device</Text>
@@ -426,8 +457,9 @@ export default function GenerationScreen(): ReactElement {
             return (
               <Pressable
                 key={style}
+                disabled={isBusy}
                 onPress={() => toggleStyle(style)}
-                style={[styles.chip, on ? styles.chipOn : styles.chipOff]}
+                style={[styles.chip, on ? styles.chipOn : styles.chipOff, isBusy && styles.chipBusy]}
               >
                 <Text style={[styles.chipText, on && styles.chipTextOn]}>{style}</Text>
               </Pressable>
@@ -465,8 +497,8 @@ export default function GenerationScreen(): ReactElement {
           {promptSuffix.length}/400 · best for accessories/clothing; server stresses matching the photo’s person
         </Text>
 
-        <Pressable style={[styles.secondaryButton, !canGenerate && styles.disabled]} onPress={generateAll} disabled={!canGenerate}>
-          <Text style={styles.secondaryButtonText}>Generate selected styles</Text>
+        <Pressable style={[styles.generateButton, !canGenerate && styles.disabled]} onPress={generateAll} disabled={!canGenerate}>
+          <Text style={styles.generateButtonText}>Generate selected styles</Text>
         </Pressable>
 
         {completedWithImage.length > 0 ? (
@@ -644,6 +676,17 @@ const styles = StyleSheet.create({
     marginTop: 8,
     color: "#c0c7d1"
   },
+  apiHostWarning: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: "#3f2b1d",
+    borderWidth: 1,
+    borderColor: "#b45309",
+    color: "#fdba74",
+    fontSize: 13,
+    lineHeight: 18
+  },
   restoreLinkWrap: {
     alignSelf: "flex-start",
     marginTop: 6,
@@ -723,6 +766,9 @@ const styles = StyleSheet.create({
     borderColor: "#475569",
     backgroundColor: "#1e293b"
   },
+  chipBusy: {
+    opacity: 0.55
+  },
   chipText: {
     color: "#94a3b8",
     textTransform: "capitalize",
@@ -765,14 +811,14 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontSize: 11
   },
-  secondaryButton: {
+  generateButton: {
     marginTop: 14,
-    backgroundColor: "#8b5cf6",
+    backgroundColor: "#3b82f6",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center"
   },
-  secondaryButtonText: {
+  generateButtonText: {
     color: "#ffffff",
     fontWeight: "600"
   },

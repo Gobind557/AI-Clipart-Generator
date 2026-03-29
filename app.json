@@ -5,16 +5,19 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.pillu00.flick"
     },
     "android": {
+      "package": "com.pillu00.flick",
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -40,9 +43,18 @@
           "photosPermission": "Allow access to photos to pick your portrait.",
           "savePhotosPermission": "Allow saving generated clipart to your gallery.",
           "isAccessMediaLocationEnabled": true,
-          "granularPermissions": ["photo"]
+          "granularPermissions": [
+            "photo"
+          ]
         }
       ]
-    ]
+    ],
+    "extra": {
+      "apiUrl": "http://10.0.2.2:8787/v1",
+      "eas": {
+        "projectId": "741ae52d-fb94-47a9-997c-16b34bd8dc0b"
+      }
+    },
+    "owner": "pillu00"
   }
 }

@@ -28,6 +28,9 @@ const resolveApiBase = (): string => {
 
 const API_URL = resolveApiBase();
 
+/** For UI diagnostics when jobs fail only on device (e.g. wrong baked-in API host). */
+export const getApiBaseUrl = (): string => API_URL;
+
 export const styles: ClipStyle[] = ["cartoon", "flat", "anime", "pixel", "sketch"];
 
 export type CreateJobOptions = {
@@ -68,10 +71,25 @@ export const createJob = async (
   });
 
   if (!response.ok) {
-    throw new Error("Failed to create generation job.");
+    let detail = "";
+    try {
+      const text = await response.text();
+      detail = text.trim().slice(0, 280);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(
+      detail
+        ? `Could not create job (${response.status}): ${detail}`
+        : `Could not create job (HTTP ${response.status}). Check API URL and network.`
+    );
   }
 
-  return response.json() as Promise<{ jobId: string }>;
+  const body = (await response.json()) as { jobId?: string };
+  if (!body?.jobId || typeof body.jobId !== "string") {
+    throw new Error("Could not create job: server response missing jobId.");
+  }
+  return { jobId: body.jobId };
 };
 
 export const getJobStatus = async (jobId: string): Promise<{ status: AppState; perStyle: StyleTile[] }> => {
