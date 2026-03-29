@@ -28,11 +28,19 @@
     },
     "plugins": [
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow access to photos to pick your portrait.",
+          "cameraPermission": "Allow camera access to capture your portrait."
+        }
+      ],
+      [
         "expo-media-library",
         {
           "photosPermission": "Allow access to photos to pick your portrait.",
           "savePhotosPermission": "Allow saving generated clipart to your gallery.",
-          "isAccessMediaLocationEnabled": true
+          "isAccessMediaLocationEnabled": true,
+          "granularPermissions": ["photo"]
         }
       ]
     ]

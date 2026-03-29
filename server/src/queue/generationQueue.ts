@@ -24,8 +24,10 @@ export const initGenerationQueue = (): void => {
   }
 
   mode = "bullmq";
+  const tls = redisUrl.startsWith("rediss://") ? {} : undefined;
   const connection = new IORedis(redisUrl, {
-    maxRetriesPerRequest: null
+    maxRetriesPerRequest: null,
+    ...(tls ? { tls } : {})
   });
 
   queue = new Queue(queueName, { connection });
@@ -51,8 +53,10 @@ export const startGenerationWorker = (): void => {
     return;
   }
 
+  const tls = redisUrl.startsWith("rediss://") ? {} : undefined;
   const connection = new IORedis(redisUrl, {
-    maxRetriesPerRequest: null
+    maxRetriesPerRequest: null,
+    ...(tls ? { tls } : {})
   });
 
   worker = new Worker(

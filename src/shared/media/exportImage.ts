@@ -28,15 +28,22 @@ export const base64ToPngFileUri = async (base64: string, basename: string): Prom
   return png.uri;
 };
 
-export const savePngToGallery = async (fileUri: string): Promise<void> => {
-  const perm = await MediaLibrary.requestPermissionsAsync();
-  if (!perm.granted) {
-    Alert.alert("Permission needed", "Allow access to save clipart to your gallery.");
-    return;
+export const savePngToGallery = async (
+  fileUri: string,
+  options?: { silent?: boolean; skipPermissionCheck?: boolean }
+): Promise<void> => {
+  if (!options?.skipPermissionCheck) {
+    const perm = await MediaLibrary.requestPermissionsAsync(true);
+    if (!perm.granted) {
+      Alert.alert("Permission needed", "Allow access to save clipart to your gallery.");
+      return;
+    }
   }
 
   await MediaLibrary.saveToLibraryAsync(fileUri);
-  Alert.alert("Saved", "PNG saved to your gallery.");
+  if (!options?.silent) {
+    Alert.alert("Saved", "PNG saved to your gallery.");
+  }
 };
 
 export const sharePngFile = async (fileUri: string, dialogTitle: string): Promise<void> => {
