@@ -24,5 +24,8 @@ app.use("/v1", jobsRouter);
 
 const port = Number(process.env.PORT ?? 8787);
 app.listen(port, () => {
-  console.log(`API listening on :${port}`);
+  const provider = (process.env.IMAGE_PROVIDER ?? "openai").toLowerCase();
+  const redis = Boolean(process.env.REDIS_URL?.trim());
+  const worker = process.env.START_WORKER === "true";
+  console.log(`API listening on :${port} (IMAGE_PROVIDER=${provider}, redis=${redis}, worker=${worker})`);
 });

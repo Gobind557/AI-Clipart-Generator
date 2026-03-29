@@ -28,6 +28,17 @@ const resolveApiBase = (): string => {
 
 const API_URL = resolveApiBase();
 
+/** RN `fetch` uses native networking — Chrome DevTools “Network” often stays empty; use Metro logs. */
+const logApi = (method: string, path: string, status: number): void => {
+  if (__DEV__) {
+    console.log(`[api] ${method} ${path} → ${status}`);
+  }
+};
+
+if (__DEV__) {
+  console.log("[api] base:", API_URL);
+}
+
 const readJobIdFromCreatePayload = (data: unknown): string | null => {
   if (!data || typeof data !== "object") return null;
   const o = data as Record<string, unknown>;
@@ -76,6 +87,7 @@ export const createJob = async (
         : {})
     })
   });
+  logApi("POST", "/jobs", response.status);
 
   const text = await response.text();
   let data: unknown;
@@ -102,6 +114,7 @@ export const createJob = async (
 
 export const getJobStatus = async (jobId: string): Promise<{ status: AppState; perStyle: StyleTile[] }> => {
   const response = await fetch(`${API_URL}/jobs/${jobId}`);
+  logApi("GET", `/jobs/${jobId}`, response.status);
   if (!response.ok) {
     throw new Error("Failed to fetch job status.");
   }
@@ -110,6 +123,7 @@ export const getJobStatus = async (jobId: string): Promise<{ status: AppState; p
 
 export const getJobResults = async (jobId: string): Promise<{ items: StyleTile[] }> => {
   const response = await fetch(`${API_URL}/jobs/${jobId}/results`);
+  logApi("GET", `/jobs/${jobId}/results`, response.status);
   if (!response.ok) {
     throw new Error("Failed to fetch job results.");
   }
